@@ -3,6 +3,8 @@ const createError = require("../utils/create-error");
 const jwt = require('jsonwebtoken')
 const sql = require("mssql");
 const { connectSqlServer, closeConnection } = require("../configs/sql-server");
+const crypto = require('crypto-js')
+const fs = require('fs')
 
 exports.login = async (req, res, next) => {
   try {
@@ -28,33 +30,66 @@ exports.login = async (req, res, next) => {
 
     const hashUsername = encodeStringToHex(username)
 
-    await connectSqlServer();
+    // await connectSqlServer();
 
-    const responese = await sql.query `SELECT RTRIM([ofctitle]) + ' ' + RTRIM([ofcfname]) + ' ' + RTRIM([ofclname]) AS fullname, 
-    RTRIM(officer.ofctitle) AS prefix, RTRIM(officer.ofcfname) AS fname, RTRIM(officer.ofclname) AS lname, 
-    RTRIM(officer.ofcgroup) AS officeCode, RTRIM(officergroup.ofcgtyp) AS officeName, officer.OFCGR AS position 
-    FROM officer 
-    INNER JOIN UserProfile ON officer.ofcid = UserProfile.OficeID 
-    INNER JOIN officergroup ON officer.ofcgroup = officergroup.ofcgid
-    WHERE RUsername = ${hashUsername} AND RPassword = ${hashPassword}`
+    // const responese = await sql.query `SELECT RTRIM([ofctitle]) + ' ' + RTRIM([ofcfname]) + ' ' + RTRIM([ofclname]) AS fullname, 
+    // RTRIM(officer.ofctitle) AS prefix, RTRIM(officer.ofcfname) AS fname, RTRIM(officer.ofclname) AS lname, 
+    // RTRIM(officer.ofcgroup) AS officeCode, RTRIM(officergroup.ofcgtyp) AS officeName, officer.OFCGR AS position 
+    // FROM officer 
+    // INNER JOIN UserProfile ON officer.ofcid = UserProfile.OficeID 
+    // INNER JOIN officergroup ON officer.ofcgroup = officergroup.ofcgid
+    // WHERE RUsername = ${hashUsername} AND RPassword = ${hashPassword}`
 
-    await closeConnection();
+    // await closeConnection();
 
-    if(responese.rowsAffected[0] === 0) {
-        return createError(400, "User not found")
-    }
+    // if(responese.rowsAffected[0] === 0) {
+    //     return createError(400, "User not found")
+    // }
 
-    // remove 1 record
-    const {recordsets, ...data_api} = responese
+    fs.readFile('login.json', 'utf8', (err, data) => {
+      if (err) {
+        res.status(500).send('Error reading users file');
+        return;
+      }
+  
+      const users = JSON.parse(data);
+      const response = users.find(user => user.username === hashUsername && user.password === hashPassword);
+      const { username, password, ...userData} = response;
+      if (userData) {
+        const token = jwt.sign(
+          { data: [userData] }, process.env.JWT_SECRET, {
+              expiresIn: process.env.JWT_EXPIRES_IN
+          }
+      )
+        res.json({ message: "Login Success!" ,token})
+      } else {
+        res.status(401).send('Invalid username or password');
+      }
+    });
+
+    // // remove 1 record
+    // const {recordsets, ...data_api} = responese
 
     // generate token
-    const token = jwt.sign(
-        { data: data_api.recordset }, process.env.JWT_SECRET, {
-            expiresIn: process.env.JWT_EXPIRES_IN
-        }
-    )
+    // const token = jwt.sign(
+    //     { data: data_api.recordset }, process.env.JWT_SECRET, {
+    //         expiresIn: process.env.JWT_EXPIRES_IN
+    //     }
+    // )
 
-    res.json({ message: "Login Success!" ,token})
+    // res.json({ message: "Login Success!" ,token})
+
+    // const hashPassword = crypto.AES.encrypt(password, process.env.ENCODE).toString();
+
+    // const unHashPassword = crypto.AES.decrypt(hashPassword, process.env.ENCODE)
+
+    // const originalPassword = unHashPassword.toString(crypto.enc.Utf8)
+
+    // res.json({
+    //   ผู้ใช้งาน: username,
+    //   เข้ารหัส: hashPassword,
+    //   ถอดรหัส: originalPassword
+    // })
 
   } catch (err) {
     next(err);
